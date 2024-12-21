@@ -29,6 +29,8 @@ namespace M3u8Downloader_H.Common.M3u8Infos
         //当原始的m3u8中的数据 不满足需求的时候 可以通过自定义的数据 进行操作
         public object? UserData { get; set; }
 
+        public bool IsFile => MediaFiles.Any(m => m.Uri.IsFile);
+
         public M3UFileInfo(M3UFileInfo m3UFileInfo)
         {
             Version = m3UFileInfo.Version;
@@ -37,16 +39,16 @@ namespace M3u8Downloader_H.Common.M3u8Infos
             AllowCache = m3UFileInfo.AllowCache;
             PlaylistType = m3UFileInfo.PlaylistType;
             Key = m3UFileInfo.Key;
-            Streams = m3UFileInfo.Streams.ToList();
-            MediaFiles = m3UFileInfo.MediaFiles.ToList();
+            Streams = [.. m3UFileInfo.Streams];
+            MediaFiles = [.. m3UFileInfo.MediaFiles];
         }
 
 
 
-        public M3UFileInfo() 
+        public M3UFileInfo()
         {
-        
-        }    
+
+        }
     }
 
     public partial class M3UFileInfo

@@ -1,0 +1,103 @@
+name: main
+
+on: 
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: '版本号'
+        required: true
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    env:
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publish
+        run: |
+          dotnet publish M3u8Downloader_H/ -o M3u8Downloader_H/bin/Publish --configuration Release
+          dotnet publish M3u8Downloader_H/ -o M3u8Downloader_H/bin/PublishSingleFile -c Release --self-contained true -r win-x64  -p:PublishSingleFile=true
+
+      - name: Download .NET 9 SDK And Copy .NET 9 SDK
+        run: |
+          Invoke-WebRequest -Uri 'https://download.visualstudio.microsoft.com/download/pr/99bd07c2-c95c-44dc-9d47-36d3b18df240/bdf26c62f69c1b783687c1dce83ccf7a/dotnet-runtime-9.0.0-win-x64.exe' -OutFile 'dotnet-9.0-runtime-x64.exe'
+          Copy-Item dotnet-9.0-runtime-x64.exe M3u8Downloader_H/bin/Publish -Recurse
+
+      - name: Upload artifacts normal
+        uses: actions/upload-artifact@v3
+        with:
+          name: M3u8Downloader_H
+          path: M3u8Downloader_H/bin/Publish
+
+      - name: Upload artifacts single file
+        uses: actions/upload-artifact@v3
+        with:
+          name: M3u8Downloader_H-SingleFile
+          path: M3u8Downloader_H/bin/PublishSingleFile
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts normal
+        uses: actions/download-artifact@v3
+        with:
+          name: M3u8Downloader_H
+          path: M3u8Downloader_H
+
+      - name: Download artifacts single file
+        uses: actions/download-artifact@v3
+        with:
+          name: M3u8Downloader_H-SingleFile
+          path: M3u8Downloader_H-SingleFile
+
+      - name: Create package
+        run: | 
+          Compress-Archive -Path M3u8Downloader_H/* -DestinationPath M3u8Downloader_H.zip -Force
+          Compress-Archive -Path M3u8Downloader_H-SingleFile/* -DestinationPath M3u8Downloader_H-SingleFile.zip -Force
+        shell: pwsh
+      
+      - name: Get Releases Descript
+        id : get_desc
+        run: |
+          curl -Lo changlog.md https://raw.githubusercontent.com/Harlan-H/M3u8Downloader_H/refs/heads/master/Changelog.md
+          result=$(awk '/^# /{if (flag) exit; flag=1} flag && NF' changlog.md)
+          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$result" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tags }}
+          body: |
+            ${{ steps.get_desc.outputs.release_body }}
+
+            # 
+              - [更多更新内容](https://github.com/Harlan-H/M3u8Downloader_H/blob/master/Changelog.md)
+
+            #
+              | 名称 | 描述 | 
+              |-------|-------|
+              | [m3u8Downloader_H.zip](https://github.com/Harlan-H/M3u8Downloader_H/releases/download/${{ github.event.inputs.tags }}/M3u8Downloader_H.zip) | 需要运行库版本,程序文件夹中的dotnet-9.0-runtime-x64.exe | 
+              | [M3u8Downloader_H-SingleFile.zip](https://github.com/Harlan-H/M3u8Downloader_H/releases/download/${{ github.event.inputs.tags }}/M3u8Downloader_H-SingleFile.zip) | 无需运行库版本,可能某些功能无法使用 | 
+              - 如果你是win7用户且程序双击没反应 那么就必须安装KB4457144 [跳转环境问题](https://github.com/Harlan-H/M3u8Downloader_H/wiki#%E7%8E%AF%E5%A2%83%E9%97%AE%E9%A2%98)
+
+          draft: false
+          prerelease: false
+          files: |
+              M3u8Downloader_H.zip
+              M3u8Downloader_H-SingleFile.zip

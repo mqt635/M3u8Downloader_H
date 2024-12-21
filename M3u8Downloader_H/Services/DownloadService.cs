@@ -1,24 +1,17 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
-using M3u8Downloader_H.Extensions;
-using System.Linq;
-using M3u8Downloader_H.Core.DownloaderSources;
-using M3u8Downloader_H.Core.DownloaderManagers;
+using M3u8Downloader_H.Downloader.DownloaderSources;
 using M3u8Downloader_H.Utils;
 
 namespace M3u8Downloader_H.Services
 {
-    public class DownloadService : IDisposable
+    public class DownloadService(SettingsService settingService) : IDisposable
     {
         private readonly SemaphoreSlim _semaphore = new(1, 1);
-        private readonly SettingsService settingService;
+        private readonly SettingsService settingService = settingService;
 
         private int _concurrentDownloadCount;
-        public DownloadService(SettingsService settingService)
-        {
-            this.settingService = settingService;
-        }
 
         private async Task EnsureThrottlingAsync(CancellationToken cancellationToken)
         {
@@ -37,40 +30,23 @@ namespace M3u8Downloader_H.Services
             }
         }
 
-        public async ValueTask GetM3u8FileInfo(IDownloadManager downloadManager,CancellationToken cancellationToken)
-        {
-            await downloadManager
-                .WithTimeout(settingService.Timeouts)
-                .WithHeaders(settingService.Headers.ToDictionary())
-                .GetM3U8FileInfo(cancellationToken);
-        }
-
 
         public async Task DownloadAsync(
             IDownloaderSource downloaderSource,
             DownloadRateSource downloadRate,
+            Action<bool> IsLive,
             CancellationToken cancellationToken = default)
         {
             await EnsureThrottlingAsync(cancellationToken);
 
-            downloaderSource
-                .WithDownloadRate(downloadRate)
-                .WithTaskNumber(settingService.MaxThreadCount)
-                .WithTimeout(settingService.Timeouts)
-                .WithRetryCount(settingService.RetryCount)
-                .WithSkipRequestError(settingService.SkipRequestError)
-                .WithSkipDirectoryExist(settingService.SkipDirectoryExist)
-                .WithSavePath(settingService.SavePath)
-                .WithForceMerge(settingService.ForcedMerger)
-                .WithMaxRecordDuration(settingService.RecordDuration)
-                .WithCleanUp(settingService.IsCleanUp)
-                .WithFormats(settingService.SelectedFormat)
-                .WithHeaders(settingService.Headers.ToDictionary());
+            downloaderSource.Settings = settingService;
+            downloaderSource.DownloadRate = downloadRate;
 
             try
             {
                 downloadRate.Run();
-                await downloaderSource.DownloadAsync(cancellationToken);
+                await downloaderSource.DownloadAsync(IsLive,cancellationToken);
+
             }
             finally
             {
